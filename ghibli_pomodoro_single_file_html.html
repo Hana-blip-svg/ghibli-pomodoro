@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ghibli Pomodoro — Single File</title>
+  <!-- Replace the Google Font family below if you prefer a local font -->
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg-url: url('https://images.unsplash.com/photo-1503264116251-35a269479413?q=80&w=1920&auto=format&fit=crop&ixlib=rb-4.0.3&s=0f3b2b2f0c1e2b0f2b1bc7f6a5d8c3f8'); /* replace with your Ghibli-style background image */
+      --card-bg: rgba(255,255,255,0.85);
+      --accent: #6aa84f;
+      --accent-dark: #4C7A36;
+      --muted: #6b7280;
+      --glass: rgba(255,255,255,0.6);
+    }
+
+    /* Reset + base */
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      background-image: linear-gradient(to bottom, rgba(10,10,20,0.15), rgba(10,10,20,0.25)), var(--bg-url);
+      background-size:cover;
+      background-position:center;
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:32px;
+    }
+
+    /* soft vignette */
+    .backdrop {
+      position:fixed; inset:0; pointer-events:none;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.25) 100%);
+      mix-blend-mode: multiply;
+    }
+
+    .container{
+      width:100%; max-width:980px;
+      display:grid; grid-template-columns: 1fr 360px; gap:28px; align-items:center;
+      padding:24px; backdrop-filter: blur(6px);
+    }
+
+    /* card */
+    .panel{
+      background: linear-gradient(180deg, var(--card-bg), rgba(255,255,255,0.75));
+      border-radius:18px; box-shadow: 0 10px 30px rgba(2,6,23,0.25);
+      padding:24px; position:relative; overflow:hidden;
+    }
+
+    /* left is big scene */
+    .scene{min-height:360px; display:flex; flex-direction:column; gap:12px; justify-content:center}
+    h1{margin:0; font-size:28px}
+    p.lead{margin:0;color:var(--muted)}
+
+    /* little Totoro-ish silhouette (stylized, generic) */
+    .silhouette{
+      width:160px; height:120px; opacity:0.9; margin-top:12px;
+      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.35));
+    }
+
+    /* right column: timer card */
+    .timer-card{display:flex;flex-direction:column;align-items:center; gap:18px; padding:18px}
+
+    .clock{
+      width:220px; height:220px; display:grid; place-items:center; position:relative;
+    }
+
+    svg.progress{transform:rotate(-90deg)}
+    .time-text{position:absolute; text-align:center}
+    .time-text .big{font-size:36px; font-weight:700}
+    .time-text .label{font-size:13px; color:var(--muted)}
+
+    .controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
+    button{border:0; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600}
+    .btn-start{background:linear-gradient(180deg,var(--accent),var(--accent-dark)); color:white}
+    .btn-muted{background:transparent; border:1px solid rgba(15,23,42,0.08);}
+
+    .settings{display:flex; flex-direction:column; gap:8px; width:100%}
+    .row{display:flex; gap:8px; align-items:center}
+    label{font-size:13px; color:var(--muted); width:130px}
+    input[type=number]{width:80px;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06)}
+
+    .small{font-size:12px;color:var(--muted)}
+
+    footer.info{font-size:12px;color:var(--muted);text-align:center}
+
+    /* responsive */
+    @media (max-width:880px){
+      .container{grid-template-columns:1fr;}
+      .scene{order:2}
+    }
+  </style>
+</head>
+<body>
+  <div class="backdrop" aria-hidden></div>
+  <main class="container" role="main">
+    <section class="panel scene" aria-labelledby="title">
+      <div>
+        <h1 id="title">Ghibli-style Pomodoro</h1>
+        <p class="lead">A calm Pomodoro timer inspired by Studio Ghibli aesthetics. Use your own background images for a stronger look.</p>
+      </div>
+
+      <!-- decorative stylized silhouette (generic, not copyrighted) -->
+      <svg class="silhouette" viewBox="0 0 300 200" aria-hidden>
+        <g fill="#2b3a2b">
+          <ellipse cx="150" cy="140" rx="100" ry="42" fill="#2b3a2b" opacity="0.95" />
+          <path d="M80 110c20-50 60-50 90-40 40 12 62 38 58 70-4 30-40 36-80 34-36-2-68-18-68-64z"/>
+          <circle cx="120" cy="86" r="6" fill="#fff" opacity="0.95"/>
+          <circle cx="180" cy="86" r="6" fill="#fff" opacity="0.95"/>
+        </g>
+      </svg>
+
+      <p class="small">Tip: Replace the CSS variable <code>--bg-url</code> (at the top) with a URL to your favourite Ghibli-styled image. Use public-domain or licensed images you own.</p>
+    </section>
+
+    <aside class="panel timer-card" aria-label="Pomodoro timer">
+      <div class="clock" id="clock" role="timer" aria-live="polite">
+        <svg class="progress" width="220" height="220" viewBox="0 0 220 220">
+          <defs>
+            <linearGradient id="g1" x1="0%" x2="100%" y1="0%" y2="100%">
+              <stop offset="0%" stop-color="var(--accent)"/>
+              <stop offset="100%" stop-color="var(--accent-dark)"/>
+            </linearGradient>
+          </defs>
+          <circle cx="110" cy="110" r="98" stroke="rgba(15,23,42,0.08)" stroke-width="18" fill="none" />
+          <circle id="progressPath" cx="110" cy="110" r="98" stroke="url(#g1)" stroke-width="18" fill="none" stroke-linecap="round" stroke-dasharray="616" stroke-dashoffset="616" />
+        </svg>
+        <div class="time-text">
+          <div class="big" id="timeDisplay">25:00</div>
+          <div class="label" id="modeLabel">Work</div>
+        </div>
+      </div>
+
+      <div class="controls" role="group" aria-label="timer controls">
+        <button id="startBtn" class="btn-start">Start</button>
+        <button id="pauseBtn" class="btn-muted">Pause</button>
+        <button id="resetBtn" class="btn-muted">Reset</button>
+      </div>
+
+      <div class="settings" aria-label="settings">
+        <div class="row">
+          <label for="workMin">Work (minutes)</label>
+          <input id="workMin" type="number" min="1" max="180" value="25">
+        </div>
+        <div class="row">
+          <label for="breakMin">Break (minutes)</label>
+          <input id="breakMin" type="number" min="1" max="60" value="5">
+        </div>
+        <div class="row">
+          <label for="autoStart">Auto-start next</label>
+          <input id="autoStart" type="checkbox" aria-label="Auto start next session">
+        </div>
+        <div class="row">
+          <label for="saveBtn">Save</label>
+          <button id="saveBtn" class="btn-muted">Save settings</button>
+        </div>
+      </div>
+
+      <footer class="info">Made for you — replace the background with your favourite Ghibli-style artwork. Ask me if you want help hosting it.</footer>
+    </aside>
+  </main>
+
+  <script>
+    // ----------------------
+    // Pomodoro timer logic
+    // ----------------------
+    (function(){
+      // Elements
+      const timeDisplay = document.getElementById('timeDisplay');
+      const modeLabel = document.getElementById('modeLabel');
+      const startBtn = document.getElementById('startBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const workMinInput = document.getElementById('workMin');
+      const breakMinInput = document.getElementById('breakMin');
+      const saveBtn = document.getElementById('saveBtn');
+      const autoStart = document.getElementById('autoStart');
+      const progressPath = document.getElementById('progressPath');
+
+      // State
+      let workSeconds = 25 * 60;
+      let breakSeconds = 5 * 60;
+      let remaining = workSeconds;
+      let running = false;
+      let mode = 'work'; // 'work' or 'break'
+      let tickInterval = null;
+
+      // stroke length for r=98 circle: circumference = 2*pi*r
+      const R = 98;
+      const CIRC = Math.PI * 2 * R; // ~615.75
+      progressPath.style.strokeDasharray = CIRC;
+      progressPath.style.strokeDashoffset = CIRC;
+
+      // helpers
+      function pad(n){return n.toString().padStart(2,'0')}
+      function formatTime(s){ const mm = Math.floor(s/60); const ss = s%60; return `${pad(mm)}:${pad(ss)}` }
+
+      function updateDisplay(){
+        timeDisplay.textContent = formatTime(remaining);
+        modeLabel.textContent = mode === 'work' ? 'Work' : 'Break';
+
+        const total = (mode === 'work') ? workSeconds : breakSeconds;
+        const pct = 1 - (remaining / total);
+        const offset = Math.max(0, CIRC - (CIRC * pct));
+        progressPath.style.strokeDashoffset = offset;
+      }
+
+      function loadSettings(){
+        const s = localStorage.getItem('ghibli_pomodoro_v1');
+        if(s){
+          try{
+            const parsed = JSON.parse(s);
+            if(parsed.work) workSeconds = parsed.work*60;
+            if(parsed.break) breakSeconds = parsed.break*60;
+            if(typeof parsed.autoStart === 'boolean') autoStart.checked = parsed.autoStart;
+            workMinInput.value = workSeconds/60;
+            breakMinInput.value = breakSeconds/60;
+          }catch(e){console.warn('settings load failed',e)}
+        }
+        remaining = (mode==='work') ? workSeconds : breakSeconds;
+        updateDisplay();
+      }
+
+      function saveSettings(){
+        const payload = {work: Number(workMinInput.value), break: Number(breakMinInput.value), autoStart:autoStart.checked};
+        localStorage.setItem('ghibli_pomodoro_v1', JSON.stringify(payload));
+        // apply immediately
+        workSeconds = Math.max(1, Number(workMinInput.value)) * 60;
+        breakSeconds = Math.max(1, Number(breakMinInput.value)) * 60;
+        if(mode==='work') remaining = workSeconds; else remaining = breakSeconds;
+        updateDisplay();
+      }
+
+      function tick(){
+        if(remaining > 0){
+          remaining -= 1;
+          updateDisplay();
+        } else {
+          // session ended
+          notifyEnd();
+          if(mode === 'work'){
+            mode = 'break';
+            remaining = breakSeconds;
+          } else {
+            mode = 'work';
+            remaining = workSeconds;
+          }
+          updateDisplay();
+          if(!autoStart.checked){ pause(); }
+        }
+      }
+
+      function start(){
+        if(running) return;
+        running = true;
+        startBtn.textContent = 'Running';
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        tickInterval = setInterval(tick, 1000);
+      }
+      function pause(){
+        if(!running) return;
+        running = false;
+        startBtn.textContent = 'Start';
+        startBtn.disabled = false;
+        if(tickInterval) clearInterval(tickInterval);
+        tickInterval = null;
+      }
+      function reset(){
+        pause();
+        if(mode==='work') remaining = workSeconds; else remaining = breakSeconds;
+        updateDisplay();
+      }
+
+      // browser notification + audio
+      function notifyEnd(){
+        // short oscillator beep
+        try{
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine'; o.frequency.value = 880;
+          g.gain.value = 0.0015; // start low
+          o.connect(g); g.connect(ctx.destination);
+          o.start();
+          g.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.02);
+          setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45); o.stop(ctx.currentTime + 0.5); }, 450);
+        }catch(e){ console.warn('audio failed',e) }
+
+        // small toast using the page
+        const prev = document.querySelector('._toast'); if(prev) prev.remove();
+        const t = document.createElement('div'); t.className = '_toast'; t.textContent = mode==='work' ? 'Work session finished — break started' : 'Break finished — time to work';
+        Object.assign(t.style,{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'28px',padding:'10px 14px',background:'rgba(0,0,0,0.6)',color:'#fff',borderRadius:'10px',zIndex:9999});
+        document.body.appendChild(t);
+        setTimeout(()=>t.remove(),3200);
+
+        // browser notification
+        if('Notification' in window && Notification.permission === 'granted'){
+          new Notification('Ghibli Pomodoro', {body: mode==='work' ? 'Work session ended' : 'Break ended'});
+        } else if('Notification' in window && Notification.permission !== 'denied'){
+          Notification.requestPermission();
+        }
+      }
+
+      // events
+      startBtn.addEventListener('click', start);
+      pauseBtn.addEventListener('click', pause);
+      resetBtn.addEventListener('click', reset);
+      saveBtn.addEventListener('click', saveSettings);
+
+      workMinInput.addEventListener('change', ()=>{
+        workSeconds = Math.max(1, Number(workMinInput.value)) * 60; if(mode==='work') remaining = workSeconds; updateDisplay();
+      });
+      breakMinInput.addEventListener('change', ()=>{
+        breakSeconds = Math.max(1, Number(breakMinInput.value)) * 60; if(mode==='break') remaining = breakSeconds; updateDisplay();
+      });
+
+      // init
+      loadSettings();
+
+      // accessibility: keyboard shortcuts
+      window.addEventListener('keydown', (e)=>{
+        if(e.code === 'Space'){
+          e.preventDefault(); running ? pause() : start();
+        } else if(e.key === 'r' || e.key === 'R'){
+          reset();
+        }
+      });
+
+      // pause by default until user starts
+      pauseBtn.disabled = true;
+    })();
+  </script>
+</body>
+</html>
